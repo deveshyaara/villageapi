@@ -1,0 +1,3 @@
+# Prisma Migrations
+
+This directory is managed by Prisma. Run `npx prisma migrate dev` to create migrations.

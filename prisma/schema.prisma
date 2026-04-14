@@ -1,0 +1,156 @@
+// VillageAPI - India's complete village-level geographical data
+// Prisma schema for PostgreSQL (NeonDB recommended)
+
+// NOTE: After running `npx prisma migrate dev`, execute:
+// CREATE EXTENSION IF NOT EXISTS pg_trgm;
+// CREATE INDEX village_name_trgm ON "Village" USING gin (name gin_trgm_ops);
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// --- Geography Models --------------------------------------------
+
+model Country {
+  id        Int      @id @default(autoincrement())
+  name      String
+  code      String   @unique
+  states    State[]
+  createdAt DateTime @default(now())
+}
+
+model State {
+  id         Int               @id @default(autoincrement())
+  code       String
+  name       String
+  countryId  Int
+  country    Country           @relation(fields: [countryId], references: [id])
+  districts  District[]
+  userAccess UserStateAccess[]
+  createdAt  DateTime          @default(now())
+
+  @@unique([code, countryId])
+}
+
+model District {
+  id           Int           @id @default(autoincrement())
+  code         String
+  name         String
+  stateId      Int
+  state        State         @relation(fields: [stateId], references: [id])
+  subDistricts SubDistrict[]
+  createdAt    DateTime      @default(now())
+
+  @@unique([code, stateId])
+}
+
+model SubDistrict {
+  id         Int       @id @default(autoincrement())
+  code       String
+  name       String
+  districtId Int
+  district   District  @relation(fields: [districtId], references: [id])
+  villages   Village[]
+  createdAt  DateTime  @default(now())
+
+  @@unique([code, districtId])
+}
+
+model Village {
+  id            Int         @id @default(autoincrement())
+  code          String      @unique
+  name          String
+  subDistrictId Int
+  subDistrict   SubDistrict @relation(fields: [subDistrictId], references: [id])
+  createdAt     DateTime    @default(now())
+
+  @@index([name])
+  @@index([subDistrictId])
+}
+
+// --- Auth & Access Models ----------------------------------------
+
+model User {
+  id           Int               @id @default(autoincrement())
+  email        String            @unique
+  passwordHash String
+  businessName String
+  gstNumber    String?
+  phone        String?
+  status       UserStatus        @default(PENDING_APPROVAL)
+  planType     PlanType          @default(FREE)
+  isAdmin      Boolean           @default(false)
+  apiKeys      ApiKey[]
+  stateAccess  UserStateAccess[]
+  apiLogs      ApiLog[]
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+}
+
+model ApiKey {
+  id         Int        @id @default(autoincrement())
+  key        String     @unique
+  secretHash String
+  name       String
+  userId     Int
+  user       User       @relation(fields: [userId], references: [id])
+  status     KeyStatus  @default(ACTIVE)
+  expiresAt  DateTime?
+  lastUsedAt DateTime?
+  apiLogs    ApiLog[]
+  createdAt  DateTime   @default(now())
+
+  @@index([key])
+}
+
+model UserStateAccess {
+  id      Int   @id @default(autoincrement())
+  userId  Int
+  stateId Int
+  user    User  @relation(fields: [userId], references: [id])
+  state   State @relation(fields: [stateId], references: [id])
+
+  @@unique([userId, stateId])
+}
+
+model ApiLog {
+  id           Int      @id @default(autoincrement())
+  apiKeyId     Int
+  userId       Int
+  endpoint     String
+  method       String
+  statusCode   Int
+  responseTime Int
+  ipAddress    String?
+  createdAt    DateTime @default(now())
+  apiKey       ApiKey   @relation(fields: [apiKeyId], references: [id])
+  user         User     @relation(fields: [userId], references: [id])
+
+  @@index([createdAt])
+  @@index([userId])
+}
+
+// --- Enums -------------------------------------------------------
+
+enum UserStatus {
+  PENDING_APPROVAL
+  ACTIVE
+  SUSPENDED
+}
+
+enum PlanType {
+  FREE
+  PREMIUM
+  PRO
+  UNLIMITED
+}
+
+enum KeyStatus {
+  ACTIVE
+  REVOKED
+}
